@@ -1,8 +1,7 @@
 /* ══════════════════════════════════════════════════════════════
-   雪夜 · 交互雪景 —— v11（修复手机端：坐标系统一）
-   根因：高分屏 devicePixelRatio>1 导致 p.width(物理像素) 与
-         触屏/CSS 像素不一致 → 触屏失效 + 楼/灯画出屏外
-   修复：pixelDensity 强制为 1，逻辑坐标 = CSS 像素，全平台统一
+   雪夜 · 交互雪景 —— v12（手机5项修复）
+   ① HUD 自适应换行  ② 楼间距拉开  ③ 雪球半空卡死修复
+   ④ 铲雪车触屏归位  ⑤ 楼/灯缩小
 ══════════════════════════════════════════════════════════════ */
 
 const CONFIG = {
@@ -12,10 +11,10 @@ const CONFIG = {
   MS_PER_SECOND: 1000,   // 毫秒/秒 ｜ 固定
   DT_CLAMP: 3,           // 帧时钳制 ｜ 建议 2–4
   EPS: 0.0001,           // 除零保护 ｜ 固定
-  MAX_PIXEL_DENSITY: 1,  // ⑪ 像素密度上限：强制 1 统一坐标系(修复手机) ｜ 固定 1
+  MAX_PIXEL_DENSITY: 1,  // 像素密度：强制 1 统一坐标系 ｜ 固定 1
   RADIUS_TO_DIAM: 2,     // 半径→直径 ｜ 固定
   ALPHA_FULL: 255,       // 满不透明度 ｜ 固定
-  LONG_PRESS_MS: 480,    // 触屏长按判定阈值(ms) ｜ 建议 350–600
+  LONG_PRESS_MS: 480,    // 触屏长按阈值(ms) ｜ 建议 350–600
 
   /* ── 夜空氛围 ── */
   BG_TOP: [7, 11, 26],        // 天顶深钴蓝 ｜ 建议 [5,8,20]~[15,22,44]
@@ -38,13 +37,13 @@ const CONFIG = {
   MOON_GLOW_ALPHA: 26,        // 月晕透明度 ｜ 建议 12–45
   MOON_GLOW_INNER_RATIO: 0.35,// 月晕内圈起点 ｜ 建议 0.2–0.6
 
-  /* ── 远景建筑 + 路灯 ── */
-  BLDG_FAR_X: 0.16,           // 远楼横向位置(宽占比) ｜ 建议 0.08–0.3
-  BLDG_FAR_W: 70,             // 远楼宽(px) ｜ 建议 50–110
-  BLDG_FAR_H_RATIO: 0.42,     // 远楼高=屏高×该比 ｜ 建议 0.3–0.5
-  BLDG_NEAR_X: 0.30,          // 近楼横向位置 ｜ 建议 0.22–0.42
-  BLDG_NEAR_W: 116,           // 近楼宽(px) ｜ 建议 80–160
-  BLDG_NEAR_H_RATIO: 0.6,     // 近楼高=屏高×该比 ｜ 建议 0.45–0.7
+  /* ── 远景建筑 + 路灯（v12：②间距拉开 ⑤缩小） ── */
+  BLDG_FAR_X: 0.12,           // ② 远楼横向位置(拉开) ｜ 建议 0.06–0.2
+  BLDG_FAR_W: 50,             // ⑤ 远楼宽(缩小) ｜ 建议 35–80
+  BLDG_FAR_H_RATIO: 0.30,     // ⑤ 远楼高=屏高×该比(缩小) ｜ 建议 0.2–0.4
+  BLDG_NEAR_X: 0.34,          // ② 近楼横向位置(拉开) ｜ 建议 0.26–0.46
+  BLDG_NEAR_W: 82,            // ⑤ 近楼宽(缩小) ｜ 建议 60–120
+  BLDG_NEAR_H_RATIO: 0.42,    // ⑤ 近楼高=屏高×该比(缩小) ｜ 建议 0.32–0.55
   BLDG_FAR_COLOR: [26, 34, 56],   // 远楼色 ｜ 深蓝灰系
   BLDG_NEAR_COLOR: [34, 44, 70],  // 近楼色 ｜ 蓝灰系
   BLDG_WIN_COLOR: [255, 214, 138],// 窗灯昏黄 ｜ 暖黄系
@@ -54,14 +53,14 @@ const CONFIG = {
   BLDG_WIN_W_RATIO: 0.5,      // 单窗宽=列距×该比 ｜ 建议 0.35–0.65
   BLDG_WIN_H_RATIO: 0.45,     // 单窗高=行距×该比 ｜ 建议 0.3–0.6
   BLDG_WIN_LIT_RATIO: 0.55,   // 亮窗占比 ｜ 建议 0.35–0.75
-  LAMP_X: 0.40,               // 路灯横向位置 ｜ 建议 0.32–0.5
-  LAMP_H_RATIO: 0.74,         // 灯杆高=屏高×该比(高于最高雪线35%) ｜ 建议 0.55–0.82
-  LAMP_POLE_W: 5,             // 灯杆宽(px) ｜ 建议 3–8
-  LAMP_ARM_LEN: 34,           // 灯臂长(px) ｜ 建议 20–50
-  LAMP_HEAD_W: 16,            // 灯头宽(px) ｜ 建议 10–24
-  LAMP_HEAD_H: 7,             // 灯头高(px) ｜ 建议 5–12
+  LAMP_X: 0.46,               // 路灯横向位置 ｜ 建议 0.4–0.55
+  LAMP_H_RATIO: 0.50,         // ⑤ 灯杆高=屏高×该比(大幅缩小，低于月亮) ｜ 建议 0.4–0.6
+  LAMP_POLE_W: 4,             // ⑤ 灯杆宽(缩小) ｜ 建议 2–6
+  LAMP_ARM_LEN: 22,           // ⑤ 灯臂长(缩小) ｜ 建议 14–34
+  LAMP_HEAD_W: 12,            // ⑤ 灯头宽(缩小) ｜ 建议 8–18
+  LAMP_HEAD_H: 5,             // ⑤ 灯头高(缩小) ｜ 建议 3–9
   LAMP_POLE_COLOR: [44, 52, 74],  // 灯杆色 ｜ 深灰蓝系
-  LAMP_HIT_PAD: 14,           // 点击判定外扩(px) ｜ 建议 8–22
+  LAMP_HIT_PAD: 18,           // 点击判定外扩(手机加大) ｜ 建议 12–26
   LIGHT_COLOR: [255, 206, 120],   // 灯光昏黄色 ｜ 暖黄系
   LIGHT_CONE_HALF: 0.62,      // 光锥半角(rad) ｜ 建议 0.4–0.9
   LIGHT_REACH_RATIO: 1.5,     // 光照距离=灯高×该比 ｜ 建议 1.1–2.0
@@ -259,10 +258,11 @@ const CONFIG = {
   UI_TEXT_SIZE: 12,           // 按钮字号 ｜ 建议 10–14
   UI_TEXT_COLOR: [10, 14, 30],// 按钮字色 ｜ 深色系
 
-  /* ── HUD ── */
+  /* ── HUD（v12：①自适应） ── */
   HUD_MARGIN_X: 14,           // HUD 左边距 ｜ 建议 10–24
   HUD_MARGIN_Y: 20,           // HUD 上边距 ｜ 建议 14–32
-  HUD_TEXT_SIZE: 12,          // HUD 字号 ｜ 建议 11–14
+  HUD_TEXT_SIZE: 12,          // HUD 字号(桌面) ｜ 建议 11–14
+  HUD_TEXT_SIZE_MIN: 9,       // ① HUD 最小字号(窄屏) ｜ 建议 8–11
   HUD_LINE_SPACING: 1.7,      // 行距倍数 ｜ 建议 1.4–2.0
   HUD_COLOR: [200, 215, 235], // HUD 字色 ｜ 冷色系
   HUD_ALPHA: 120,             // HUD 主透明度 ｜ 建议 70–170
@@ -822,7 +822,7 @@ class FootprintSystem {
 }
 
 
-/* ════════════════ 雪球 ════════════════ */
+/* ════════════════ 雪球（v12：③修复半空卡死） ════════════════ */
 class Snowball {
   constructor(scene, x, r) {
     this.scene = scene;
@@ -864,8 +864,15 @@ class Snowball {
     this.vx += -dhdx * CONFIG.SNOWBALL_SLOPE_FORCE * dt;
     this.vx *= Math.pow(CONFIG.SNOWBALL_FRICTION, dt);
     this.x += this.vx * dt;
-    this.x = p.constrain(this.x, this.r, p.width - this.r);
-    this.sit();
+    /* ③ 先落地判定，再水平约束 —— 避免大球半径>离地距时 constrain 与 sit 死锁卡半空 */
+    const surfY = g.surfaceYAt(this.x);
+    if (this.y + this.r >= surfY) {
+      this.y = surfY - this.r;
+      this.x = p.constrain(this.x, this.r, p.width - this.r);
+      this.sit();
+    } else {
+      this.x = p.constrain(this.x, this.r, p.width - this.r);
+    }
     this.angle += (this.vx / Math.max(this.r, CONFIG.EPS)) * dt;
   }
 
@@ -874,6 +881,16 @@ class Snowball {
     this.vy += CONFIG.SNOWBALL_GRAVITY * dt;
     this.x += this.vx * dt;
     this.y += this.vy * dt;
+    /* ③ 同样：落地优先于水平约束 */
+    const surfY = g.surfaceYAt(this.x);
+    if (this.y + this.r >= surfY) {
+      this.y = surfY - this.r;
+      this.x = p.constrain(this.x, this.r, p.width - this.r);
+      this.vy = 0;
+      this.state = 'free';
+      this.justLanded = true;
+      return;
+    }
     this.x = p.constrain(this.x, this.r, p.width - this.r);
     this.angle += (this.vx / Math.max(this.r, CONFIG.EPS)) * dt;
 
@@ -892,14 +909,6 @@ class Snowball {
         }
         return;
       }
-    }
-
-    const surfY = g.surfaceYAt(this.x);
-    if (this.y + this.r >= surfY) {
-      this.y = surfY - this.r;
-      this.vy = 0;
-      this.state = 'free';
-      this.justLanded = true;
     }
   }
 
@@ -1242,7 +1251,7 @@ class SnowballSystem {
 }
 
 
-/* ════════════════ 铲雪车 ════════════════ */
+/* ════════════════ 铲雪车（v12：④触屏归位修复） ════════════════ */
 class SnowPlow {
   constructor(scene) {
     this.scene = scene;
@@ -1282,7 +1291,7 @@ class SnowPlow {
   endDrag() {
     if (this.state === 'drag') {
       this.state = 'returning';
-      this.y = this.p.height;
+      this.y = this.p.height;   // ④ 进入归位态立即贴底
     }
   }
 
@@ -1318,6 +1327,8 @@ class SnowPlow {
   update(dt, dtMs) {
     const p = this.p, g = this.scene.grid;
     if (this.state === 'returning') {
+      /* ④ 归位态：每帧强制贴底 + 匀速回左下角 */
+      this.y = p.height;
       this.x -= CONFIG.PLOW_HOME_SPEED * dt;
       if (this.x <= CONFIG.PLOW_HOME_X) {
         this.x = CONFIG.PLOW_HOME_X;
@@ -1388,7 +1399,7 @@ class SnowPlow {
 }
 
 
-/* ════════════════ 场景总控 ════════════════ */
+/* ════════════════ 场景总控（v12：①HUD自适应 ④触屏坐标缓存） ════════════════ */
 class SnowScene {
   constructor(p) {
     this.p = p;
@@ -1407,6 +1418,7 @@ class SnowScene {
     this.touchStart = 0;
     this.touchAnchor = { x: 0, y: 0 };
     this.longPressFired = false;
+    this.lastTouch = { x: 0, y: 0 };   // ④ 缓存最后触点坐标
 
     this.uiButtons = [
       { id: 'size-',  label: '雪−', kind: 'size',  dir: -1 },
@@ -1559,6 +1571,7 @@ class SnowScene {
     const p = this.p;
     this.leftDown = true;
     this.mouseActive = true;
+    this.lastTouch = { x, y };     // ④ 记录触点
     const btn = this.uiButtonAt(x, y);
     if (btn) { this.uiHold = btn.id; this.input = null; return; }
     const plowHit = this.plow.state === 'home' && this.plow.hit(x, y);
@@ -1620,13 +1633,16 @@ class SnowScene {
     this.touchId = p.touches.length ? p.touches[0].id : 0;
     this.touchStart = p.millis();
     this.touchAnchor = { x: p.mouseX, y: p.mouseY };
+    this.lastTouch = { x: p.mouseX, y: p.mouseY };   // ④ 缓存
     this.longPressFired = false;
     this.pressAt(p.mouseX, p.mouseY);
   }
   onTouchMove() {
+    const p = this.p;
+    this.lastTouch = { x: p.mouseX, y: p.mouseY };   // ④ 持续缓存最后位置
     if (this.longPressFired) return;
-    const dx = this.p.mouseX - this.touchAnchor.x;
-    const dy = this.p.mouseY - this.touchAnchor.y;
+    const dx = p.mouseX - this.touchAnchor.x;
+    const dy = p.mouseY - this.touchAnchor.y;
     if (dx * dx + dy * dy > CONFIG.DRAG_START_PX * CONFIG.DRAG_START_PX) {
       this.longPressFired = true;
     }
@@ -1634,7 +1650,8 @@ class SnowScene {
   onTouchEnd() {
     const wasLong = this.longPressFired &&
                     (this.p.millis() - this.touchStart) >= CONFIG.LONG_PRESS_MS;
-    const x = this.p.mouseX, y = this.p.mouseY;
+    /* ④ 用缓存的最后触点坐标释放（touchEnded 时 p.mouseX 可能已失效） */
+    const x = this.lastTouch.x, y = this.lastTouch.y;
     this.touchId = null;
     this.longPressFired = false;
     if (wasLong) {
@@ -1707,32 +1724,57 @@ class SnowScene {
     p.textAlign(p.LEFT, p.TOP);
   }
 
+  /* ① HUD 自适应：按屏宽算字号 + 超长自动换行 */
   drawHUD() {
     const p = this.p, c = CONFIG.HUD_COLOR;
+    const maxW = p.width - CONFIG.HUD_MARGIN_X * CONFIG.RADIUS_TO_DIAM;
+    let fs = CONFIG.HUD_TEXT_SIZE;
+    while (fs > CONFIG.HUD_TEXT_SIZE_MIN && p.textWidth('❄ 雪速 ×0.00 · 雪尺 ×0.00') > maxW) {
+      fs -= 1;
+      p.textSize(fs);
+    }
+    p.textSize(fs);
     p.noStroke();
     p.textFont('system-ui, "PingFang SC", "Microsoft YaHei", sans-serif');
-    p.textSize(CONFIG.HUD_TEXT_SIZE);
     p.textAlign(p.LEFT, p.TOP);
     p.fill(c[0], c[1], c[2], CONFIG.HUD_ALPHA);
     p.text(`❄ 雪速 ×${this.speedMult.toFixed(CONFIG.SPEED_DECIMALS)} · 雪尺 ×${this.sizeScale.toFixed(CONFIG.SPEED_DECIMALS)}`,
            CONFIG.HUD_MARGIN_X, CONFIG.HUD_MARGIN_Y);
     p.fill(c[0], c[1], c[2], CONFIG.HUD_ALPHA * CONFIG.HUD_HINT_ALPHA_RATIO);
-    p.text('点路灯开关 · 长按消融 · 拖铲雪车擦雪(松手归位) · 双击铲雪车清场 · 滚球/堆雪人/双击碎裂',
-           CONFIG.HUD_MARGIN_X,
-           CONFIG.HUD_MARGIN_Y + CONFIG.HUD_TEXT_SIZE * CONFIG.HUD_LINE_SPACING);
+    p.textSize(Math.max(fs - 1, CONFIG.HUD_TEXT_SIZE_MIN));
+    const hint = '点路灯开关·长按消融·拖铲雪车擦雪·双击清场·滚球/堆雪人/双击碎裂';
+    this.drawWrappedText(hint, CONFIG.HUD_MARGIN_X,
+                         CONFIG.HUD_MARGIN_Y + fs * CONFIG.HUD_LINE_SPACING,
+                         maxW, fs * CONFIG.HUD_LINE_SPACING);
+  }
+
+  /* ① 手动换行绘制 */
+  drawWrappedText(str, x, y, maxW, lineH) {
+    const p = this.p;
+    let line = '';
+    let cy = y;
+    for (let i = 0; i < str.length; i++) {
+      const ch = str[i];
+      if (p.textWidth(line + ch) > maxW && line.length > 0) {
+        p.text(line, x, cy);
+        line = ch;
+        cy += lineH;
+      } else {
+        line += ch;
+      }
+    }
+    if (line) p.text(line, x, cy);
   }
 }
 
 
-/* ════════════════ 实例模式入口（v11：pixelDensity=1 统一坐标） ════════════════ */
+/* ════════════════ 实例模式入口 ════════════════ */
 const snowSketch = (p) => {
   let scene = null;
 
   p.setup = () => {
     p.createCanvas(p.windowWidth, p.windowHeight);
-    /* ⑪ 关键修复：强制 pixelDensity=1，使 p.width/触屏坐标/CSS像素 三者统一
-          解决手机高分屏下 触屏失效 + 楼/灯画出屏外 的问题 */
-    p.pixelDensity(1);
+    p.pixelDensity(1);   // 统一坐标系（手机高分屏修复）
     scene = new SnowScene(p);
     p.drawingContext.lineCap = 'round';
     p.canvas.addEventListener('contextmenu', (e) => e.preventDefault());
