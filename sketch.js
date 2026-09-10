@@ -1,5 +1,8 @@
 /* ══════════════════════════════════════════════════════════════
-   雪夜 · 交互雪景 —— v8（铲雪车系统 / 碎块沉积减量 / 去光晕）
+   雪夜 · 交互雪景 —— v11（修复手机端：坐标系统一）
+   根因：高分屏 devicePixelRatio>1 导致 p.width(物理像素) 与
+         触屏/CSS 像素不一致 → 触屏失效 + 楼/灯画出屏外
+   修复：pixelDensity 强制为 1，逻辑坐标 = CSS 像素，全平台统一
 ══════════════════════════════════════════════════════════════ */
 
 const CONFIG = {
@@ -9,9 +12,10 @@ const CONFIG = {
   MS_PER_SECOND: 1000,   // 毫秒/秒 ｜ 固定
   DT_CLAMP: 3,           // 帧时钳制 ｜ 建议 2–4
   EPS: 0.0001,           // 除零保护 ｜ 固定
-  MAX_PIXEL_DENSITY: 2,  // 像素密度上限 ｜ 建议 1–2
+  MAX_PIXEL_DENSITY: 1,  // ⑪ 像素密度上限：强制 1 统一坐标系(修复手机) ｜ 固定 1
   RADIUS_TO_DIAM: 2,     // 半径→直径 ｜ 固定
   ALPHA_FULL: 255,       // 满不透明度 ｜ 固定
+  LONG_PRESS_MS: 480,    // 触屏长按判定阈值(ms) ｜ 建议 350–600
 
   /* ── 夜空氛围 ── */
   BG_TOP: [7, 11, 26],        // 天顶深钴蓝 ｜ 建议 [5,8,20]~[15,22,44]
@@ -33,6 +37,39 @@ const CONFIG = {
   MOON_GLOW_RADIUS: 120,      // 月晕半径 ｜ 建议 80–180
   MOON_GLOW_ALPHA: 26,        // 月晕透明度 ｜ 建议 12–45
   MOON_GLOW_INNER_RATIO: 0.35,// 月晕内圈起点 ｜ 建议 0.2–0.6
+
+  /* ── 远景建筑 + 路灯 ── */
+  BLDG_FAR_X: 0.16,           // 远楼横向位置(宽占比) ｜ 建议 0.08–0.3
+  BLDG_FAR_W: 70,             // 远楼宽(px) ｜ 建议 50–110
+  BLDG_FAR_H_RATIO: 0.42,     // 远楼高=屏高×该比 ｜ 建议 0.3–0.5
+  BLDG_NEAR_X: 0.30,          // 近楼横向位置 ｜ 建议 0.22–0.42
+  BLDG_NEAR_W: 116,           // 近楼宽(px) ｜ 建议 80–160
+  BLDG_NEAR_H_RATIO: 0.6,     // 近楼高=屏高×该比 ｜ 建议 0.45–0.7
+  BLDG_FAR_COLOR: [26, 34, 56],   // 远楼色 ｜ 深蓝灰系
+  BLDG_NEAR_COLOR: [34, 44, 70],  // 近楼色 ｜ 蓝灰系
+  BLDG_WIN_COLOR: [255, 214, 138],// 窗灯昏黄 ｜ 暖黄系
+  BLDG_WIN_ALPHA: 150,        // 窗灯透明度 ｜ 建议 90–210
+  BLDG_WIN_COLS: 4,           // 窗列数 ｜ 建议 3–6
+  BLDG_WIN_ROWS: 9,           // 窗行数 ｜ 建议 6–14
+  BLDG_WIN_W_RATIO: 0.5,      // 单窗宽=列距×该比 ｜ 建议 0.35–0.65
+  BLDG_WIN_H_RATIO: 0.45,     // 单窗高=行距×该比 ｜ 建议 0.3–0.6
+  BLDG_WIN_LIT_RATIO: 0.55,   // 亮窗占比 ｜ 建议 0.35–0.75
+  LAMP_X: 0.40,               // 路灯横向位置 ｜ 建议 0.32–0.5
+  LAMP_H_RATIO: 0.74,         // 灯杆高=屏高×该比(高于最高雪线35%) ｜ 建议 0.55–0.82
+  LAMP_POLE_W: 5,             // 灯杆宽(px) ｜ 建议 3–8
+  LAMP_ARM_LEN: 34,           // 灯臂长(px) ｜ 建议 20–50
+  LAMP_HEAD_W: 16,            // 灯头宽(px) ｜ 建议 10–24
+  LAMP_HEAD_H: 7,             // 灯头高(px) ｜ 建议 5–12
+  LAMP_POLE_COLOR: [44, 52, 74],  // 灯杆色 ｜ 深灰蓝系
+  LAMP_HIT_PAD: 14,           // 点击判定外扩(px) ｜ 建议 8–22
+  LIGHT_COLOR: [255, 206, 120],   // 灯光昏黄色 ｜ 暖黄系
+  LIGHT_CONE_HALF: 0.62,      // 光锥半角(rad) ｜ 建议 0.4–0.9
+  LIGHT_REACH_RATIO: 1.5,     // 光照距离=灯高×该比 ｜ 建议 1.1–2.0
+  LIGHT_CORE_ALPHA: 70,       // 光核透明度 ｜ 建议 40–110
+  LIGHT_MID_ALPHA: 34,        // 光中圈透明度 ｜ 建议 18–60
+  LIGHT_OUTER_ALPHA: 14,      // 光外圈透明度 ｜ 建议 6–30
+  LIGHT_GROUND_ALPHA: 60,     // 地面光斑透明度 ｜ 建议 30–100
+  LIGHT_GROUND_W_RATIO: 0.5,  // 地面光斑宽=Reach×该比 ｜ 建议 0.35–0.7
 
   /* ── 雪花本体 ── */
   SNOW_COUNT: 200,            // 常驻雪花数 ｜ 建议 100–400
@@ -59,7 +96,7 @@ const CONFIG = {
   SNOW_LAND_OFFSET_RATIO: 0.5,// 陷入半颗判落地 ｜ 建议 0.3–0.7
 
   /* ── 鼠标与雪花 ── */
-  SNOW_HOVER_RADIUS: 10,      // 鼠标尖冻结半径 ｜ 建议 6–16
+  SNOW_HOVER_RADIUS: 10,      // 指针尖冻结半径 ｜ 建议 6–16
   MELT_RADIUS: 28,            // 消融半径 ｜ 建议 16–40
   MELT_DURATION: 260,         // 消融时长(ms) ｜ 建议 150–450
 
@@ -107,7 +144,6 @@ const CONFIG = {
 
   /* ── 雪球 / 雪人 ── */
   SNOWBALL_INIT_RADIUS: 12,   // 雪球初始半径 ｜ 建议 8–18
-  SNOWBALL_MAX_RADIUS: 90,    // 雪球半径上限 ｜ 建议 60–140
   SNOWBALL_GROW_PER_PX: 0.06, // 每滚 1px 期望半径增量 ｜ 建议 0.03–0.10
   SNOWBALL_PICKUP_RATIO: 0.3, // 可拾取体积比例 ｜ 建议 0.15–0.5
   SNOWBALL_SCRAPE_WIDTH_RATIO: 4, // 刮削宽度=半径×该比 ｜ 建议 2–6
@@ -165,14 +201,15 @@ const CONFIG = {
   SHARD_BLUR: 3,              // 虚化软边宽度(px) ｜ 建议 2–6
   SHARD_BLUR_ALPHA: 120,      // 软边光晕透明度 ｜ 建议 60–180
   SHARD_LAND_RATIO: 0.6,      // 陷入自身半径×该比判触雪 ｜ 建议 0.4–0.8
-  SHARD_DEPOSIT_RATIO: 0.2,   // ① 触雪回沉积比例：只涨一点点 ｜ 建议 0.1–0.3
+  SHARD_DEPOSIT_RATIO: 0.2,   // 触雪回沉积比例 ｜ 建议 0.1–0.3
 
-  /* ── 铲雪车（v8 新增） ── */
+  /* ── 铲雪车 ── */
   PLOW_HOME_X: 70,            // 停放中心 x（左下角） ｜ 建议 40–140
   PLOW_W: 92,                 // 车体宽 ｜ 建议 60–140
   PLOW_H: 46,                 // 车体高 ｜ 建议 32–70
   PLOW_RUN_SPEED: 6,          // 清场巡行速(px/帧) ｜ 建议 4–10
-  PLOW_RETURN_SPEED: 4,       // 回程速(px/帧) ｜ 建议 2–8
+  PLOW_RETURN_SPEED: 4,       // 进场回程速(px/帧) ｜ 建议 2–8
+  PLOW_HOME_SPEED: 7,         // 拖拽后自动归位速(px/帧) ｜ 建议 4–12
   PLOW_RETURN_DELAY_MS: 3000, // 退场后等待(ms) ｜ 建议 2000–6000
   PLOW_BODY_COLOR: [236, 148, 52],   // 橙色车体 ｜ 工程橙系
   PLOW_CAB_COLOR: [214, 222, 234],   // 驾驶舱浅冷灰 ｜ 冷灰系
@@ -235,7 +272,7 @@ const CONFIG = {
 const rgba = (c, a) => `rgba(${c[0]},${c[1]},${c[2]},${(a / CONFIG.ALPHA_FULL).toFixed(3)})`;
 
 
-/* ════════════════ 背景层 ════════════════ */
+/* ════════════════ 背景层（静态：星月+楼+灯） ════════════════ */
 class BackgroundLayer {
   constructor(scene) { this.scene = scene; this.p = scene.p; this.buf = null; }
 
@@ -250,13 +287,6 @@ class BackgroundLayer {
     sky.addColorStop(1, rgba(CONFIG.BG_BOTTOM, CONFIG.ALPHA_FULL));
     ctx.fillStyle = sky;
     ctx.fillRect(0, 0, w, h);
-
-    const hy = h * (1 - CONFIG.HAZE_HEIGHT_RATIO);
-    const haze = ctx.createLinearGradient(0, hy, 0, h);
-    haze.addColorStop(0, rgba(CONFIG.HAZE_COLOR, 0));
-    haze.addColorStop(1, rgba(CONFIG.HAZE_COLOR, CONFIG.HAZE_ALPHA));
-    ctx.fillStyle = haze;
-    ctx.fillRect(0, hy, w, h - hy);
 
     g.noStroke();
     for (let i = 0; i < CONFIG.STAR_COUNT; i++) {
@@ -286,14 +316,131 @@ class BackgroundLayer {
     g.fill(CONFIG.MOON_COLOR[0], CONFIG.MOON_COLOR[1], CONFIG.MOON_COLOR[2], CONFIG.ALPHA_FULL);
     g.circle(mx, my, CONFIG.MOON_RADIUS * CONFIG.RADIUS_TO_DIAM);
 
+    this.drawBuilding(g, w * CONFIG.BLDG_FAR_X, h,
+                      CONFIG.BLDG_FAR_W, h * CONFIG.BLDG_FAR_H_RATIO,
+                      CONFIG.BLDG_FAR_COLOR);
+    this.drawBuilding(g, w * CONFIG.BLDG_NEAR_X, h,
+                      CONFIG.BLDG_NEAR_W, h * CONFIG.BLDG_NEAR_H_RATIO,
+                      CONFIG.BLDG_NEAR_COLOR);
+
+    this.lampHeadX = w * CONFIG.LAMP_X + CONFIG.LAMP_ARM_LEN;
+    this.lampHeadY = h * (1 - CONFIG.LAMP_H_RATIO);
+    this.drawLamp(g);
+
+    const hy = h * (1 - CONFIG.HAZE_HEIGHT_RATIO);
+    const haze = ctx.createLinearGradient(0, hy, 0, h);
+    haze.addColorStop(0, rgba(CONFIG.HAZE_COLOR, 0));
+    haze.addColorStop(1, rgba(CONFIG.HAZE_COLOR, CONFIG.HAZE_ALPHA));
+    ctx.fillStyle = haze;
+    ctx.fillRect(0, hy, w, h - hy);
+
     this.buf = g;
+  }
+
+  drawBuilding(g, cx, baseY, bw, bh, color) {
+    const x0 = cx - bw / CONFIG.RADIUS_TO_DIAM;
+    const y0 = baseY - bh;
+    g.noStroke();
+    g.fill(color[0], color[1], color[2], CONFIG.ALPHA_FULL);
+    g.rect(x0, y0, bw, bh);
+    const cols = CONFIG.BLDG_WIN_COLS;
+    const rows = CONFIG.BLDG_WIN_ROWS;
+    const cellW = bw / cols;
+    const cellH = bh / rows;
+    const winW = cellW * CONFIG.BLDG_WIN_W_RATIO;
+    const winH = cellH * CONFIG.BLDG_WIN_H_RATIO;
+    for (let r = 0; r < rows; r++) {
+      for (let c = 0; c < cols; c++) {
+        if (this.p.random() > CONFIG.BLDG_WIN_LIT_RATIO) continue;
+        const wx = x0 + c * cellW + (cellW - winW) / CONFIG.RADIUS_TO_DIAM;
+        const wy = y0 + r * cellH + (cellH - winH) / CONFIG.RADIUS_TO_DIAM;
+        g.fill(CONFIG.BLDG_WIN_COLOR[0], CONFIG.BLDG_WIN_COLOR[1],
+               CONFIG.BLDG_WIN_COLOR[2], CONFIG.BLDG_WIN_ALPHA);
+        g.rect(wx, wy, winW, winH);
+      }
+    }
+  }
+
+  drawLamp(g) {
+    const p = this.p;
+    const poleX = p.width * CONFIG.LAMP_X;
+    const baseY = p.height;
+    const topY = this.lampHeadY;
+    g.noStroke();
+    g.fill(CONFIG.LAMP_POLE_COLOR[0], CONFIG.LAMP_POLE_COLOR[1],
+           CONFIG.LAMP_POLE_COLOR[2], CONFIG.ALPHA_FULL);
+    g.rect(poleX - CONFIG.LAMP_POLE_W / CONFIG.RADIUS_TO_DIAM, topY,
+           CONFIG.LAMP_POLE_W, baseY - topY);
+    g.rect(poleX, topY, CONFIG.LAMP_ARM_LEN, CONFIG.LAMP_POLE_W);
+    g.fill(CONFIG.BLDG_WIN_COLOR[0], CONFIG.BLDG_WIN_COLOR[1],
+           CONFIG.BLDG_WIN_COLOR[2], CONFIG.ALPHA_FULL);
+    g.rect(this.lampHeadX - CONFIG.LAMP_HEAD_W / CONFIG.RADIUS_TO_DIAM,
+           topY, CONFIG.LAMP_HEAD_W, CONFIG.LAMP_HEAD_H);
+  }
+
+  lampHit(px, py) {
+    const pad = CONFIG.LAMP_HIT_PAD;
+    return px >= this.lampHeadX - CONFIG.LAMP_HEAD_W / CONFIG.RADIUS_TO_DIAM - pad &&
+           px <= this.lampHeadX + CONFIG.LAMP_HEAD_W / CONFIG.RADIUS_TO_DIAM + pad &&
+           py >= this.lampHeadY - pad &&
+           py <= this.lampHeadY + CONFIG.LAMP_HEAD_H + pad;
   }
 
   draw() { this.p.image(this.buf, 0, 0); }
 }
 
 
-/* ════════════════ 积雪网格（v8：擦除盒 / 左侧全清） ════════════════ */
+/* ════════════════ 路灯光效（开关式） ════════════════ */
+class StreetLight {
+  constructor(scene) { this.scene = scene; this.p = scene.p; this.on = false; }
+
+  toggle() { this.on = !this.on; }
+
+  draw() {
+    if (!this.on) return;
+    const p = this.p, bg = this.scene.bg;
+    const hx = bg.lampHeadX, hy = bg.lampHeadY + CONFIG.LAMP_HEAD_H;
+    const reach = p.height * CONFIG.LAMP_H_RATIO * CONFIG.LIGHT_REACH_RATIO;
+    const half = CONFIG.LIGHT_CONE_HALF;
+    const lc = CONFIG.LIGHT_COLOR;
+    const ctx = p.drawingContext;
+
+    const layers = [
+      { r: reach, a: CONFIG.LIGHT_OUTER_ALPHA },
+      { r: reach * 0.72, a: CONFIG.LIGHT_MID_ALPHA },
+      { r: reach * 0.42, a: CONFIG.LIGHT_CORE_ALPHA },
+    ];
+    for (const L of layers) {
+      const grad = ctx.createRadialGradient(hx, hy, 0, hx, hy, L.r);
+      grad.addColorStop(0, rgba(lc, L.a));
+      grad.addColorStop(1, rgba(lc, 0));
+      ctx.fillStyle = grad;
+      ctx.beginPath();
+      ctx.moveTo(hx, hy);
+      ctx.arc(hx, hy, L.r, p.HALF_PI - half, p.HALF_PI + half);
+      ctx.closePath();
+      ctx.fill();
+    }
+
+    const gy = p.height;
+    const gw = reach * CONFIG.LIGHT_GROUND_W_RATIO;
+    const gh = gw * 0.22;
+    const gg = ctx.createRadialGradient(hx, gy, 0, hx, gy, gw / CONFIG.RADIUS_TO_DIAM);
+    gg.addColorStop(0, rgba(lc, CONFIG.LIGHT_GROUND_ALPHA));
+    gg.addColorStop(1, rgba(lc, 0));
+    ctx.fillStyle = gg;
+    ctx.save();
+    ctx.translate(hx, gy);
+    ctx.scale(1, gh / (gw / CONFIG.RADIUS_TO_DIAM));
+    ctx.beginPath();
+    ctx.arc(0, 0, gw / CONFIG.RADIUS_TO_DIAM, 0, p.TWO_PI);
+    ctx.fill();
+    ctx.restore();
+  }
+}
+
+
+/* ════════════════ 积雪网格 ════════════════ */
 class SnowGrid {
   constructor(scene) { this.scene = scene; this.p = scene.p; }
 
@@ -400,7 +547,6 @@ class SnowGrid {
     }
   }
 
-  /* ③ 橡皮擦除：仅移除盒体与雪柱重叠部分，上部雪面自然沉降 */
   eraseBox(x0, x1, yTop, yBottom) {
     const i0 = this.indexAt(x0);
     const i1 = this.indexAt(x1);
@@ -413,7 +559,6 @@ class SnowGrid {
     }
   }
 
-  /* ② 铲雪车巡行：身后整列清零 */
   clearLeftOf(x) {
     const iMax = this.indexAt(x);
     for (let i = 0; i <= iMax; i++) {
@@ -510,7 +655,7 @@ class SnowGrid {
 }
 
 
-/* ════════════════ 雪花（v8：无光晕圆圈） ════════════════ */
+/* ════════════════ 雪花 ════════════════ */
 class Snowflake {
   constructor(scene, scatter) {
     this.scene = scene;
@@ -702,8 +847,7 @@ class Snowball {
     if (dist <= CONFIG.EPS) return;
     const depth = g.heightAt(this.x);
     if (depth < CONFIG.SNOWBALL_MIN_ROLL_DEPTH) return;
-    const desired = Math.min(this.r + dist * CONFIG.SNOWBALL_GROW_PER_PX,
-                             CONFIG.SNOWBALL_MAX_RADIUS);
+    const desired = this.r + dist * CONFIG.SNOWBALL_GROW_PER_PX;
     if (desired <= this.r) return;
     const pi = p.TWO_PI / CONFIG.RADIUS_TO_DIAM;
     const need = pi * (desired * desired - this.r * this.r);
@@ -1047,7 +1191,6 @@ class SnowballSystem {
       s.rot += s.vr * dt;
       const surf = this.scene.grid.surfaceYAt(s.x);
       if (s.y + s.rEff * CONFIG.SHARD_LAND_RATIO >= surf) {
-        /* ① 只回沉积一小部分 */
         this.scene.grid.depositAt(s.x, s.area * CONFIG.SHARD_DEPOSIT_RATIO);
         this.shards.splice(i, 1);
         continue;
@@ -1099,12 +1242,12 @@ class SnowballSystem {
 }
 
 
-/* ════════════════ 铲雪车（v8 新增） ════════════════ */
+/* ════════════════ 铲雪车 ════════════════ */
 class SnowPlow {
   constructor(scene) {
     this.scene = scene;
     this.p = scene.p;
-    this.state = 'home';     // home / drag / run / off / return
+    this.state = 'home';
     this.x = CONFIG.PLOW_HOME_X;
     this.y = this.p.height;
     this.offT = 0;
@@ -1136,9 +1279,13 @@ class SnowPlow {
     this.y = this.p.height;
   }
   beginDrag() { if (this.state === 'home') this.state = 'drag'; }
-  endDrag() { if (this.state === 'drag') this.state = 'home'; }
+  endDrag() {
+    if (this.state === 'drag') {
+      this.state = 'returning';
+      this.y = this.p.height;
+    }
+  }
 
-  /* ③ 橡皮式擦除：仅车体占据范围 */
   dragTo(mx, my) {
     const p = this.p;
     this.x = p.constrain(mx, CONFIG.PLOW_W / CONFIG.RADIUS_TO_DIAM,
@@ -1170,12 +1317,18 @@ class SnowPlow {
 
   update(dt, dtMs) {
     const p = this.p, g = this.scene.grid;
-    if (this.state === 'run') {
+    if (this.state === 'returning') {
+      this.x -= CONFIG.PLOW_HOME_SPEED * dt;
+      if (this.x <= CONFIG.PLOW_HOME_X) {
+        this.x = CONFIG.PLOW_HOME_X;
+        this.state = 'home';
+      }
+    } else if (this.state === 'run') {
       this.x += CONFIG.PLOW_RUN_SPEED * dt;
-      g.clearLeftOf(this.x);          // ② 身后整列（顶到地）清零
+      g.clearLeftOf(this.x);
       this.sweepObjects(this.x);
       if (this.x - CONFIG.PLOW_W / CONFIG.RADIUS_TO_DIAM > p.width) {
-        g.clearAll();                 // 退场时全场无雪
+        g.clearAll();
         this.sweepObjects(Number.MAX_VALUE);
         this.state = 'off';
         this.offT = 0;
@@ -1184,7 +1337,7 @@ class SnowPlow {
       this.offT += dtMs;
       if (this.offT >= CONFIG.PLOW_RETURN_DELAY_MS) {
         this.state = 'return';
-        this.x = -CONFIG.PLOW_W / CONFIG.RADIUS_TO_DIAM;   // 自左侧进场
+        this.x = -CONFIG.PLOW_W / CONFIG.RADIUS_TO_DIAM;
         this.y = p.height;
       }
     } else if (this.state === 'return') {
@@ -1203,7 +1356,6 @@ class SnowPlow {
     const W = g.PLOW_W, H = g.PLOW_H, x = this.x, y = this.y;
     p.noStroke();
 
-    /* 铲板 */
     p.push();
     p.translate(x + W * g.PLOW_BLADE_X, y - H * g.PLOW_BLADE_Y);
     p.rotate(g.PLOW_BLADE_TILT);
@@ -1213,12 +1365,10 @@ class SnowPlow {
            W * g.PLOW_BLADE_W, H * g.PLOW_BLADE_H);
     p.pop();
 
-    /* 车体 */
     p.fill(g.PLOW_BODY_COLOR[0], g.PLOW_BODY_COLOR[1], g.PLOW_BODY_COLOR[2], CONFIG.ALPHA_FULL);
     p.rect(x + W * g.PLOW_BODY_X0, y - H * g.PLOW_BODY_TOP,
            W * (g.PLOW_BODY_X1 - g.PLOW_BODY_X0), H * g.PLOW_BODY_H);
 
-    /* 驾驶舱 + 车窗 */
     p.fill(g.PLOW_CAB_COLOR[0], g.PLOW_CAB_COLOR[1], g.PLOW_CAB_COLOR[2], CONFIG.ALPHA_FULL);
     p.rect(x + W * g.PLOW_CAB_X0, y - H * g.PLOW_CAB_TOP,
            W * (g.PLOW_CAB_X1 - g.PLOW_CAB_X0), H * (g.PLOW_CAB_TOP - g.PLOW_CAB_BOT));
@@ -1226,13 +1376,11 @@ class SnowPlow {
     p.rect(x + W * g.PLOW_WIN_X0, y - H * g.PLOW_WIN_TOP,
            W * (g.PLOW_WIN_X1 - g.PLOW_WIN_X0), H * (g.PLOW_WIN_TOP - g.PLOW_WIN_BOT));
 
-    /* 轮 */
     const wr = H * g.PLOW_WHEEL_RATIO;
     p.fill(g.PLOW_WHEEL_COLOR[0], g.PLOW_WHEEL_COLOR[1], g.PLOW_WHEEL_COLOR[2], CONFIG.ALPHA_FULL);
     p.circle(x + W * g.PLOW_WHEEL_X0, y - wr, wr * CONFIG.RADIUS_TO_DIAM);
     p.circle(x + W * g.PLOW_WHEEL_X1, y - wr, wr * CONFIG.RADIUS_TO_DIAM);
 
-    /* 顶灯 */
     p.fill(g.PLOW_BEACON_COLOR[0], g.PLOW_BEACON_COLOR[1], g.PLOW_BEACON_COLOR[2], CONFIG.ALPHA_FULL);
     p.circle(x + W * g.PLOW_BEACON_X, y - H * g.PLOW_CAB_TOP - H * g.PLOW_BEACON_R,
              H * g.PLOW_BEACON_R * CONFIG.RADIUS_TO_DIAM);
@@ -1240,7 +1388,7 @@ class SnowPlow {
 }
 
 
-/* ════════════════ 场景总控（v8） ════════════════ */
+/* ════════════════ 场景总控 ════════════════ */
 class SnowScene {
   constructor(p) {
     this.p = p;
@@ -1255,6 +1403,11 @@ class SnowScene {
     this.input = null;
     this.lastClickTime = 0;
 
+    this.touchId = null;
+    this.touchStart = 0;
+    this.touchAnchor = { x: 0, y: 0 };
+    this.longPressFired = false;
+
     this.uiButtons = [
       { id: 'size-',  label: '雪−', kind: 'size',  dir: -1 },
       { id: 'size+',  label: '雪+', kind: 'size',  dir: 1 },
@@ -1268,6 +1421,7 @@ class SnowScene {
     this.footprints = new FootprintSystem(this);
     this.snowSystem = new SnowballSystem(this);
     this.plow = new SnowPlow(this);
+    this.streetLight = new StreetLight(this);
     this.reset();
   }
 
@@ -1278,6 +1432,7 @@ class SnowScene {
     this.footprints.rebuild();
     this.snowSystem.rebuild();
     this.plow.reset();
+    this.streetLight.on = false;
     this.input = null;
     this.lastClickTime = 0;
   }
@@ -1335,6 +1490,11 @@ class SnowScene {
     this.my = p.mouseY;
     if (p.movedX !== 0 || p.movedY !== 0) this.mouseActive = true;
 
+    if (this.longPressFired && this.touchId !== null) {
+      this.leftDown = true;
+      this.mouseActive = true;
+    }
+
     if (this.uiHold && this.leftDown) {
       const btn = this.uiButtons.find(b => b.id === this.uiHold);
       if (btn) {
@@ -1372,7 +1532,6 @@ class SnowScene {
     }
     if (!inp.isDrag) return;
 
-    /* ③ 拖拽铲雪车 = 橡皮擦雪 */
     if (inp.plowTarget) {
       if (this.plow.state === 'home') this.plow.beginDrag();
       if (this.plow.state === 'drag') this.plow.dragTo(p.mouseX, p.mouseY);
@@ -1396,33 +1555,31 @@ class SnowScene {
     if (inp.dragged) this.snowSystem.dragUpdate(inp.dragged, p.mouseX, p.mouseY, dt);
   }
 
-  onPress() {
+  pressAt(x, y) {
     const p = this.p;
-    if (p.mouseButton !== p.LEFT) return;
     this.leftDown = true;
     this.mouseActive = true;
-    const btn = this.uiButtonAt(p.mouseX, p.mouseY);
+    const btn = this.uiButtonAt(x, y);
     if (btn) { this.uiHold = btn.id; this.input = null; return; }
-    const plowHit = this.plow.state === 'home' && this.plow.hit(p.mouseX, p.mouseY);
-    const t = plowHit ? null : this.snowSystem.ballAt(p.mouseX, p.mouseY);
+    const plowHit = this.plow.state === 'home' && this.plow.hit(x, y);
+    const t = plowHit ? null : this.snowSystem.ballAt(x, y);
     this.input = {
-      ax: p.mouseX, ay: p.mouseY,
+      ax: x, ay: y,
       isDrag: false, dragged: null,
       ball: t ? t.ball : null,
       plowTarget: plowHit,
+      lampTarget: !plowHit && !t && this.bg.lampHit(x, y),
     };
   }
 
-  onRelease() {
+  releaseAt(x, y) {
     const p = this.p;
-    if (p.mouseButton !== p.LEFT) return;
     this.leftDown = false;
     if (this.uiHold) { this.uiHold = null; this.input = null; return; }
     const inp = this.input;
     this.input = null;
     if (!inp) return;
 
-    /* 铲雪车：拖拽结束 / 双击巡行清场 */
     if (inp.plowTarget) {
       if (inp.isDrag) { this.plow.endDrag(); return; }
       const now = p.millis();
@@ -1438,13 +1595,59 @@ class SnowScene {
     }
 
     const now = p.millis();
-    const target = this.snowSystem.ballAt(p.mouseX, p.mouseY);
+    const target = this.snowSystem.ballAt(x, y);
     const isDouble = (now - this.lastClickTime) < CONFIG.DOUBLE_CLICK_MS;
     this.lastClickTime = isDouble ? 0 : now;
+
+    if (inp.lampTarget && !inp.isDrag) {
+      this.streetLight.toggle();
+      return;
+    }
+
     if (isDouble && target) {
       this.snowSystem.shatter(target);
     } else if (!target) {
-      this.footprints.tryAdd(p.mouseX, p.mouseY);
+      this.footprints.tryAdd(x, y);
+    }
+  }
+
+  onPress() { if (this.p.mouseButton === this.p.LEFT) this.pressAt(this.p.mouseX, this.p.mouseY); }
+  onRelease() { if (this.p.mouseButton === this.p.LEFT) this.releaseAt(this.p.mouseX, this.p.mouseY); }
+
+  onTouchStart() {
+    const p = this.p;
+    if (this.touchId !== null) return;
+    this.touchId = p.touches.length ? p.touches[0].id : 0;
+    this.touchStart = p.millis();
+    this.touchAnchor = { x: p.mouseX, y: p.mouseY };
+    this.longPressFired = false;
+    this.pressAt(p.mouseX, p.mouseY);
+  }
+  onTouchMove() {
+    if (this.longPressFired) return;
+    const dx = this.p.mouseX - this.touchAnchor.x;
+    const dy = this.p.mouseY - this.touchAnchor.y;
+    if (dx * dx + dy * dy > CONFIG.DRAG_START_PX * CONFIG.DRAG_START_PX) {
+      this.longPressFired = true;
+    }
+  }
+  onTouchEnd() {
+    const wasLong = this.longPressFired &&
+                    (this.p.millis() - this.touchStart) >= CONFIG.LONG_PRESS_MS;
+    const x = this.p.mouseX, y = this.p.mouseY;
+    this.touchId = null;
+    this.longPressFired = false;
+    if (wasLong) {
+      this.leftDown = false;
+      this.input = null;
+      return;
+    }
+    this.releaseAt(x, y);
+  }
+  checkLongPress() {
+    if (this.longPressFired || this.touchId === null) return;
+    if (this.p.millis() - this.touchStart >= CONFIG.LONG_PRESS_MS) {
+      this.longPressFired = true;
     }
   }
 
@@ -1467,11 +1670,14 @@ class SnowScene {
     this.input = null;
     this.keyUp = false;
     this.keyDown = false;
+    this.touchId = null;
+    this.longPressFired = false;
     if (this.plow.state === 'drag') this.plow.endDrag();
   }
 
   render() {
     this.bg.draw();
+    this.streetLight.draw();
     this.grid.draw();
     this.footprints.draw();
     this.snowSystem.drawTrails();
@@ -1511,37 +1717,48 @@ class SnowScene {
     p.text(`❄ 雪速 ×${this.speedMult.toFixed(CONFIG.SPEED_DECIMALS)} · 雪尺 ×${this.sizeScale.toFixed(CONFIG.SPEED_DECIMALS)}`,
            CONFIG.HUD_MARGIN_X, CONFIG.HUD_MARGIN_Y);
     p.fill(c[0], c[1], c[2], CONFIG.HUD_ALPHA * CONFIG.HUD_HINT_ALPHA_RATIO);
-    p.text('左键:消融/留痕/滚球/堆叠/双击碎裂 · 拖铲雪车擦雪 · 双击铲雪车清场 · ↑↓按钮调速调雪尺',
+    p.text('点路灯开关 · 长按消融 · 拖铲雪车擦雪(松手归位) · 双击铲雪车清场 · 滚球/堆雪人/双击碎裂',
            CONFIG.HUD_MARGIN_X,
            CONFIG.HUD_MARGIN_Y + CONFIG.HUD_TEXT_SIZE * CONFIG.HUD_LINE_SPACING);
   }
 }
 
 
-/* ════════════════ 实例模式入口 ════════════════ */
+/* ════════════════ 实例模式入口（v11：pixelDensity=1 统一坐标） ════════════════ */
 const snowSketch = (p) => {
   let scene = null;
 
   p.setup = () => {
     p.createCanvas(p.windowWidth, p.windowHeight);
-    p.pixelDensity(Math.min(window.devicePixelRatio || 1, CONFIG.MAX_PIXEL_DENSITY));
+    /* ⑪ 关键修复：强制 pixelDensity=1，使 p.width/触屏坐标/CSS像素 三者统一
+          解决手机高分屏下 触屏失效 + 楼/灯画出屏外 的问题 */
+    p.pixelDensity(1);
     scene = new SnowScene(p);
     p.drawingContext.lineCap = 'round';
     p.canvas.addEventListener('contextmenu', (e) => e.preventDefault());
     window.addEventListener('blur', () => scene.clearPointer());
   };
 
-  p.draw = () => { if (scene) scene.frame(); };
+  p.draw = () => {
+    if (scene) {
+      scene.checkLongPress();
+      scene.frame();
+    }
+  };
 
-  p.mousePressed = () => { if (scene) scene.onPress(); };
+  p.mousePressed  = () => { if (scene) scene.onPress(); };
   p.mouseReleased = () => { if (scene) scene.onRelease(); };
+
+  p.touchStarted = () => { if (scene) { scene.onTouchStart(); return false; } };
+  p.touchMoved   = () => { if (scene) { scene.onTouchMove(); return false; } };
+  p.touchEnded   = () => { if (scene) { scene.onTouchEnd(); return false; } };
 
   p.windowResized = () => {
     p.resizeCanvas(p.windowWidth, p.windowHeight);
     if (scene) scene.onResize();
   };
 
-  p.keyPressed = () => { if (scene && scene.onKeyPress()) return false; };
+  p.keyPressed  = () => { if (scene && scene.onKeyPress()) return false; };
   p.keyReleased = () => { if (scene && scene.onKeyRelease()) return false; };
 };
 
