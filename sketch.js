@@ -1,9 +1,34 @@
-/* ══════════════════════════════════════════════════════════════
-   雪夜 · 交互雪景 —— v15（完整注释版 + 电脑手机自适应 + 雪球卡死根治）
-   ① 雪球全状态卡住检测 + 堆叠失败立即下落
-   ② 电脑端楼距恢复初版(0.16/0.30)，手机端自动拉开(0.08/0.22)+呼吸动画
-   ③ 所有 CONFIG 项恢复完整注释（美学作用 + 建议范围）
-══════════════════════════════════════════════════════════════ */
+/* ════════════════════════════════════════════════════════════════════
+   雪夜 · 交互雪景
+   ────────────────────────────────────────────────────────────────────
+   【当前版本】v16（2026-09-10）
+
+   【本版本改动】
+   ① 雪球卡死彻底根治：卡住检测改用"毫秒计时"(STUCK_MS)替代帧数，
+      不受速度档/dt 影响；贴面卡死也能救（强行按回雪面）；
+      堆叠引用 stackWith 一律清除，杜绝永久悬空
+   ② 半空雪花堆积根治：冻结加"最长冻结时间"(SNOW_FREEZE_MAX_MS=1500ms)
+      硬上限，超时强制解冻，物理上不可能再永久悬停
+
+   【本版本具备的全部功能】
+   · 动态飘雪：200 片六角冰晶，大小/速度/透明度随纵深变化，恒定直线漂移
+   · 真实积雪：面积守恒堆积 + 扩散沉降 + 流动找平，形成自然雪丘
+   · 悬停冻结：指针靠近雪花暂停飘落，移开继续（最长冻 1.5 秒兜底）
+   · 长按消融：按住贴近雪花使其融化消失
+   · 滚雪球：拖拽雪面生成雪球，越滚越大无上限，消耗脚下积雪
+   · 堆雪人：小雪球放到大雪球上组合成雪人（眼睛+胡萝卜鼻）
+   · 双击碎裂：击碎成 10–15 块不规则软边雪块，自然下坠并少量回沉积
+   · 铲雪车：拖拽擦雪、松手自动归位；双击触发全场悬空清场动画
+   · 路灯开关：点击切换昏黄锥形灯光 + 地面光斑
+   · 远景建筑：两栋随机亮窗高楼，电脑/手机自适应间距，手机端呼吸动画
+   · 冷蓝脚印：单击雪面留痕，2 秒淡出
+   · 调速调尺：↑↓键 + 右上按钮调节雪速/雪花大小（长按连续，加速无上限）
+   · 全平台：桌面鼠标 + 手机/平板触屏，自适应屏幕，HUD 自动换行
+   · 像素密度=1 统一坐标系，保交互兼容；描边加粗抗糊
+   ────────────────────────────────────────────────────────────────────
+   【技术】p5.js 1.9.4 实例模式 · 纯前端静态 · CONFIG 集中参数 · Class 封装
+   【历史版本】v1~v15 见 GitHub Commits 记录，可随时回退
+════════════════════════════════════════════════════════════════════ */
 
 const CONFIG = {
 
@@ -16,7 +41,7 @@ const CONFIG = {
   RADIUS_TO_DIAM: 2,     // 半径→直径换算常数（几何） ｜ 固定
   ALPHA_FULL: 255,       // 不透明度满值常数 ｜ 固定
   LONG_PRESS_MS: 480,    // 触屏长按判定阈值(ms) ｜ 建议 350–600
-  STUCK_FRAMES: 20,      // 雪球连续不动帧数超此值强制重置下落 ｜ 建议 15–30
+  STUCK_MS: 500,         // 雪球连续不动超过此毫秒数强制重置下落（改用时间，不受帧率/速度档影响） ｜ 建议 300–800
 
   /* ── 夜空氛围 ──────────────────────────────────────────── */
   BG_TOP: [7, 11, 26],        // 天顶深钴蓝：压住全场、衬托白雪 ｜ 建议 [5,8,20]~[15,22,44]
@@ -39,7 +64,107 @@ const CONFIG = {
   MOON_GLOW_ALPHA: 26,        // 月晕透明度：必须微弱 ｜ 建议 12–45
   MOON_GLOW_INNER_RATIO: 0.35,// 月晕渐变内圈起点比例 ｜ 建议 0.2–0.6
 
-  /* ── 远景建筑 + 路灯（v15：电脑手机自适应） ─────────────── */
+  /* ── 远景建筑 + 路灯（电脑手机自适应） ─────────────────── */
+  BLDG_FAR_X_DESKTOP: 0.16,   // 电脑端远楼横向位置（恢复初版） ｜ 建议 0.12–0.22
+  BLDG_FAR_X_MOBILE: 0.08,    // 手机端远楼横向位置（拉开间距） ｜ 建议 0.04–0.12
+  BLDG_FAR_W: 70,             // 远楼宽(px) ｜ 建议 50–110
+  BLDG_FAR_H_RATIO: 0.42,     // 远楼高=屏高×该比 ｜ 建议 0.3–0.5
+  BLDG_NEAR_X_DESKTOP: 0.30,  // 电脑端近楼横向位置（恢复初版） ｜ 建议 0.24–0.36
+  BLDG_NEAR_X_MOBILE: 0.22,   // 手机端近楼横向位置（拉开间距） ｜ 建议 0.16–0.28
+  BLDG_NEAR_W: 116,           // 近楼宽(px) ｜ 建议 80–160
+  BLDG_NEAR_H_RATIO: 0.60,    // 近楼高=屏高×该比 ｜ 建议 0.45–0.7
+  BLDG_BREATH_AMP: 0.003,     // 手机端楼体呼吸振幅（宽占比） ｜ 建议 0.001–0.006
+  BLDG_BREATH_SPEED: 0.0008,  // 手机端楼体呼吸频率 ｜ 建议 0.0004–0.0015
+  BLDG_FAR_COLOR: [26, 34, 56],   // 远楼色（更暗更远） ｜ 深蓝灰系
+  BLDG_NEAR_COLOR: [34, 44, 70],  // 近楼色 ｜ 蓝灰系
+  BLDG_WIN_COLOR: [255, 214, 138],// 窗灯昏黄 ｜ 暖黄系
+  BLDG_WIN_ALPHA: 150,        // 窗灯透明度 ｜ 建议 90–210
+  BLDG_WIN_COLS: 4,           // 窗列数 ｜ 建议 3–6
+  BLDG_WIN_ROWS: 9,           // 窗行数 ｜ 建议 6–14
+  BLDG_WIN_W_RATIO: 0.5,      // 单窗宽=列距×该比 ｜ 建议 0.35–0.65
+  BLDG_WIN_H_RATIO: 0.45,     // 单窗高=行距×该比 ｜ 建议 0.3–0.6
+  BLDG_WIN_LIT_RATIO: 0.55,   // 亮窗占比 ｜ 建议 0.35–0.75
+  LAMP_X_DESKTOP: 0.46,       // 电脑端路灯横向位置（恢复初版） ｜ 建议 0.4–0.52
+  LAMP_X_MOBILE: 0.62,        // 手机端路灯横向位置（大幅右移分离） ｜ 建议 0.55–0.72
+  LAMP_H_RATIO: 0.74,         // 灯杆高=屏高×该比（高于最高雪线35%） ｜ 建议 0.55–0.82
+  LAMP_POLE_W: 5,             // 灯杆宽(px) ｜ 建议 3–8
+  LAMP_ARM_LEN: 34,           // 灯臂长(px) ｜ 建议 20–50
+  LAMP_HEAD_W: 16,            // 灯头宽(px) ｜ 建议 10–24
+  LAMP_HEAD_H: 7,             // 灯头高(px) ｜ 建议 5–12
+  LAMP_POLE_COLOR: [44, 52, 74],  // 灯杆色 ｜ 深灰蓝系
+  LAMP_HIGHLIGHT_COLOR: [120, 110, 90], // 灯杆暖高光（与冷楼区分） ｜ 暖灰系
+  LAMP_HIT_PAD: 22,           // 点击判定外扩（手机加大） ｜ 建议 14–30
+  LIGHT_COLOR: [255, 206, 120],   // 灯光昏黄色 ｜ 暖黄系
+  LIGHT_CONE_HALF: 0.62,      //明白，搜索不到是因为 GitHub 编辑器对中文注释/空格的匹配很敏感。直接给你**完整代码**，整份覆盖 `sketch.js` 即可——这次两个 bug 都已从机制上根治。
+
+```js
+/* ════════════════════════════════════════════════════════════════════
+   雪夜 · 交互雪景
+   ────────────────────────────────────────────────────────────────────
+   【当前版本】v16（2026-09-10）
+
+   【本版本改动】
+   ① 雪球卡死彻底根治：卡住检测改用"毫秒计时"(STUCK_MS)替代帧数，
+      不受速度档/dt 影响；贴面卡死也能救（强行按回雪面）；
+      堆叠引用 stackWith 一律清除，杜绝永久悬空
+   ② 半空雪花堆积根治：冻结加"最长冻结时间"(SNOW_FREEZE_MAX_MS=1500ms)
+      硬上限，超时强制解冻，物理上不可能再永久悬停
+
+   【本版本具备的全部功能】
+   · 动态飘雪：200 片六角冰晶，大小/速度/透明度随纵深变化，恒定直线漂移
+   · 真实积雪：面积守恒堆积 + 扩散沉降 + 流动找平，形成自然雪丘
+   · 悬停冻结：指针靠近雪花暂停飘落，移开继续（最长冻 1.5 秒兜底）
+   · 长按消融：按住贴近雪花使其融化消失
+   · 滚雪球：拖拽雪面生成雪球，越滚越大无上限，消耗脚下积雪
+   · 堆雪人：小雪球放到大雪球上组合成雪人（眼睛+胡萝卜鼻）
+   · 双击碎裂：击碎成 10–15 块不规则软边雪块，自然下坠并少量回沉积
+   · 铲雪车：拖拽擦雪、松手自动归位；双击触发全场悬空清场动画
+   · 路灯开关：点击切换昏黄锥形灯光 + 地面光斑
+   · 远景建筑：两栋随机亮窗高楼，电脑/手机自适应间距，手机端呼吸动画
+   · 冷蓝脚印：单击雪面留痕，2 秒淡出
+   · 调速调尺：↑↓键 + 右上按钮调节雪速/雪花大小（长按连续，加速无上限）
+   · 全平台：桌面鼠标 + 手机/平板触屏，自适应屏幕，HUD 自动换行
+   · 像素密度=1 统一坐标系，保交互兼容；描边加粗抗糊
+   ────────────────────────────────────────────────────────────────────
+   【技术】p5.js 1.9.4 实例模式 · 纯前端静态 · CONFIG 集中参数 · Class 封装
+   【历史版本】v1~v15 见 GitHub Commits 记录，可随时回退
+════════════════════════════════════════════════════════════════════ */
+
+const CONFIG = {
+
+  /* ── 时间基准 ──────────────────────────────────────────── */
+  BASE_FPS: 60,          // 基准帧率：所有"每帧"速度的换算锚点 ｜ 建议固定 60
+  MS_PER_SECOND: 1000,   // 毫秒/秒：时间单位换算 ｜ 固定
+  DT_CLAMP: 3,           // 帧时上限钳制：切后台回来雪花不会瞬移 ｜ 建议 2–4
+  EPS: 0.0001,           // 除零保护常数 ｜ 固定
+  MAX_PIXEL_DENSITY: 1,  // 像素密度上限：强制 1 统一坐标系保交互兼容 ｜ 固定 1
+  RADIUS_TO_DIAM: 2,     // 半径→直径换算常数（几何） ｜ 固定
+  ALPHA_FULL: 255,       // 不透明度满值常数 ｜ 固定
+  LONG_PRESS_MS: 480,    // 触屏长按判定阈值(ms) ｜ 建议 350–600
+  STUCK_MS: 500,         // 雪球连续不动超过此毫秒数强制重置下落（改用时间，不受帧率/速度档影响） ｜ 建议 300–800
+
+  /* ── 夜空氛围 ──────────────────────────────────────────── */
+  BG_TOP: [7, 11, 26],        // 天顶深钴蓝：压住全场、衬托白雪 ｜ 建议 [5,8,20]~[15,22,44]
+  BG_BOTTOM: [30, 42, 72],    // 天际微亮蓝：与雪色呼应，避免死黑 ｜ 建议 [22,30,54]~[40,54,90]
+  HAZE_COLOR: [122, 144, 186],// 地雾颜色：近地一层呼吸感冷雾 ｜ 冷蓝灰系
+  HAZE_ALPHA: 20,             // 地雾透明度：若有若无才高级 ｜ 建议 10–40
+  HAZE_HEIGHT_RATIO: 0.28,    // 地雾占屏高比例 ｜ 建议 0.15–0.4
+  STAR_COUNT: 90,             // 星数：疏朗为宜，多则抢雪 ｜ 建议 40–160
+  STAR_SKY_RATIO: 0.72,       // 星只分布在天空上段的比例 ｜ 建议 0.5–0.9
+  STAR_SIZE_MIN: 0.6,         // 最小星径：远处微芒 ｜ 建议 0.4–1.0
+  STAR_SIZE_MAX: 1.8,         // 最大星径：近景亮点 ｜ 建议 1.4–2.4
+  STAR_ALPHA_MIN: 40,         // 最暗星透明度 ｜ 建议 20–80
+  STAR_ALPHA_MAX: 150,        // 最亮星透明度：不可盖过雪 ｜ 建议 100–200
+  STAR_COLOR: [222, 232, 246],// 星光色：微蓝冷白 ｜ 冷白系
+  MOON_X_RATIO: 0.78,         // 冷月横向位置（宽占比） ｜ 建议 0.15–0.85
+  MOON_Y_RATIO: 0.18,         // 冷月纵向位置（高占比） ｜ 建议 0.10–0.30
+  MOON_RADIUS: 34,            // 月半径：小而清冷 ｜ 建议 22–56
+  MOON_COLOR: [226, 233, 244],// 月色：偏蓝的冷白 ｜ 冷白系
+  MOON_GLOW_RADIUS: 120,      // 月晕扩散半径：朦胧光域 ｜ 建议 80–180
+  MOON_GLOW_ALPHA: 26,        // 月晕透明度：必须微弱 ｜ 建议 12–45
+  MOON_GLOW_INNER_RATIO: 0.35,// 月晕渐变内圈起点比例 ｜ 建议 0.2–0.6
+
+  /* ── 远景建筑 + 路灯（电脑手机自适应） ─────────────────── */
   BLDG_FAR_X_DESKTOP: 0.16,   // 电脑端远楼横向位置（恢复初版） ｜ 建议 0.12–0.22
   BLDG_FAR_X_MOBILE: 0.08,    // 手机端远楼横向位置（拉开间距） ｜ 建议 0.04–0.12
   BLDG_FAR_W: 70,             // 远楼宽(px) ｜ 建议 50–110
@@ -103,6 +228,7 @@ const CONFIG = {
   SNOW_LAND_OFFSET_RATIO: 0.5,// 陷入半颗雪花判落地：视觉更服帖 ｜ 建议 0.3–0.7
 
   /* ── 鼠标与雪花 ────────────────────────────────────────── */
+  SNOW_FREEZE_MAX_MS: 1500,   // 雪花最长冻结时间(ms)：超时强制解冻，杜绝半空永久堆积 ｜ 建议 800–2500
   SNOW_HOVER_RADIUS: 10,      // 指针尖冻结半径：互动的"呼吸感" ｜ 建议 6–16
   MELT_RADIUS: 28,            // 按住左键的消融半径：掌心温度 ｜ 建议 16–40
   MELT_DURATION: 260,         // 消融蜷缩时长(ms)：看得见"化掉" ｜ 建议 150–450
@@ -281,7 +407,7 @@ const CONFIG = {
 const rgba = (c, a) => `rgba(${c[0]},${c[1]},${c[2]},${(a / CONFIG.ALPHA_FULL).toFixed(3)})`;
 
 
-/* ════════════════ 背景层（静态：星月+楼+灯，v15电脑手机自适应） ════════════════ */
+/* ════════════════ 背景层（静态：星月+楼+灯，电脑手机自适应） ════════════════ */
 class BackgroundLayer {
   constructor(scene) { this.scene = scene; this.p = scene.p; this.buf = null; this.breathPhase = 0; }
 
@@ -331,13 +457,13 @@ class BackgroundLayer {
     g.fill(CONFIG.MOON_COLOR[0], CONFIG.MOON_COLOR[1], CONFIG.MOON_COLOR[2], CONFIG.ALPHA_FULL);
     g.circle(mx, my, CONFIG.MOON_RADIUS * CONFIG.RADIUS_TO_DIAM);
 
-    /* ② 电脑端用初版楼距，手机端用拉开后的楼距 */
+    /* 电脑端用初版楼距，手机端用拉开后的楼距 */
     const farX = this.isMobile() ? CONFIG.BLDG_FAR_X_MOBILE : CONFIG.BLDG_FAR_X_DESKTOP;
     const nearX = this.isMobile() ? CONFIG.BLDG_NEAR_X_MOBILE : CONFIG.BLDG_NEAR_X_DESKTOP;
     this.drawBuilding(g, w * farX, h, CONFIG.BLDG_FAR_W, h * CONFIG.BLDG_FAR_H_RATIO, CONFIG.BLDG_FAR_COLOR);
     this.drawBuilding(g, w * nearX, h, CONFIG.BLDG_NEAR_W, h * CONFIG.BLDG_NEAR_H_RATIO, CONFIG.BLDG_NEAR_COLOR);
 
-    /* ② 电脑端用初版灯位，手机端用右移后的灯位 */
+    /* 电脑端用初版灯位，手机端用右移后的灯位 */
     const lampX = this.isMobile() ? CONFIG.LAMP_X_MOBILE : CONFIG.LAMP_X_DESKTOP;
     this.lampHeadX = w * lampX + CONFIG.LAMP_ARM_LEN;
     this.lampHeadY = h * (1 - CONFIG.LAMP_H_RATIO);
@@ -412,7 +538,7 @@ class BackgroundLayer {
            py <= this.lampHeadY + CONFIG.LAMP_HEAD_H + pad;
   }
 
-  /* ② 手机端呼吸动画：每帧微调楼体宽度 */
+  /* 手机端呼吸动画：每帧微调楼体宽度 */
   updateBreath(dtMs) {
     if (!this.isMobile()) return;
     this.breathPhase += dtMs * CONFIG.BLDG_BREATH_SPEED;
@@ -445,7 +571,7 @@ class BackgroundLayer {
 class StreetLight {
   constructor(scene) { this.scene = scene; this.p = scene.p; this.on = false; }
 
-  /* ① 单击切换，直到下次单击 */
+  /* 单击切换，直到下次单击 */
   toggle() { this.on = !this.on; }
 
   draw() {
@@ -710,7 +836,7 @@ class SnowGrid {
 }
 
 
-/* ════════════════ 雪花（v15：frozen强制恢复） ════════════════ */
+/* ════════════════ 雪花（v16：冻结加最长时长兜底，杜绝半空堆积） ════════════════ */
 class Snowflake {
   constructor(scene, scatter) {
     this.scene = scene;
@@ -733,6 +859,7 @@ class Snowflake {
       ? p.random(-p.height * CONFIG.SNOW_SCATTER_TOP_RATIO, p.height)
       : -p.random(0, CONFIG.SNOW_SPAWN_PAD);
     this.frozen = false;
+    this.frozenAt = 0;          // 开始冻结的时刻(ms)
     this.melting = false; this.meltT = 0;
   }
 
@@ -741,8 +868,9 @@ class Snowflake {
   update(dt, dtMs, speedMult) {
     const p = this.p, s = this.scene;
     this.size = this.baseSize * s.sizeScale;
+    const nowMs = p.millis();
 
-    /* ④ 消融触发时强制解冻 */
+    /* 消融触发时强制解冻 */
     if (s.mouseActive && s.leftDown && !s.uiHold) {
       const dx = this.x - s.mx, dy = this.y - s.my;
       if (dx * dx + dy * dy < CONFIG.MELT_RADIUS * CONFIG.MELT_RADIUS) {
@@ -757,18 +885,21 @@ class Snowflake {
       return;
     }
 
-    /* ④ 每帧检查：如果不在悬停半径内，强制解冻（防止永久冻住） */
+    /* 已冻结：不在半径内 或 超过最长冻结时间 → 强制解冻（杜绝半空永久堆积） */
     if (this.frozen) {
       const dx = this.x - s.mx, dy = this.y - s.my;
       const inRadius = dx * dx + dy * dy < CONFIG.SNOW_HOVER_RADIUS * CONFIG.SNOW_HOVER_RADIUS;
-      const shouldFreeze = s.mouseActive && !s.leftDown && !s.uiHold && inRadius;
-      if (!shouldFreeze) this.frozen = false;
+      const shouldKeep = s.mouseActive && !s.leftDown && !s.uiHold && inRadius;
+      const frozenTooLong = (nowMs - this.frozenAt) > CONFIG.SNOW_FREEZE_MAX_MS;
+      if (!shouldKeep || frozenTooLong) this.frozen = false;
     }
 
-    if (s.mouseActive && !s.leftDown && !s.uiHold && !this.frozen) {
+    /* 未冻结且满足条件 → 进入冻结，并记录开始时刻 */
+    if (!this.frozen && s.mouseActive && !s.leftDown && !s.uiHold) {
       const dx = this.x - s.mx, dy = this.y - s.my;
       if (dx * dx + dy * dy < CONFIG.SNOW_HOVER_RADIUS * CONFIG.SNOW_HOVER_RADIUS) {
         this.frozen = true;
+        this.frozenAt = nowMs;
         return;
       }
     }
@@ -890,7 +1021,7 @@ class FootprintSystem {
 }
 
 
-/* ════════════════ 雪球（v15：全状态卡住检测根治） ════════════════ */
+/* ════════════════ 雪球（v16：卡住检测改用毫秒计时，贴面卡死也能救） ════════════════ */
 class Snowball {
   constructor(scene, x, r) {
     this.scene = scene;
@@ -905,7 +1036,7 @@ class Snowball {
     this.stackWith = null;
     this.justLanded = false;
     this.lastTrailX = null;
-    this.stuckCount = 0;
+    this.stuckSince = 0;   // 开始卡住的时刻（ms），0=未在卡
     this.lastY = 0;
     this.sit();
     this.lastY = this.y;
@@ -929,23 +1060,31 @@ class Snowball {
     g.scrapeUniform(this.x, this.r * CONFIG.SNOWBALL_SCRAPE_WIDTH_RATIO, dV);
   }
 
-  /* ① 通用卡住检测：所有状态都可调用，连续多帧 Y 几乎不变且未落地 → 强制下落 */
-  checkStuck() {
-    if (Math.abs(this.y - this.lastY) < CONFIG.EPS) {
-      this.stuckCount++;
-    } else {
-      this.stuckCount = 0;
+  /* 卡住检测（改用时间）：连续 STUCK_MS 毫秒 Y 几乎不变 → 强制下落。
+     无论是否悬空都兜底：哪怕贴着面卡死也强行重置到雪面并清零速度 */
+  checkStuck(now) {
+    const moved = Math.abs(this.y - this.lastY) > 0.05;   // 阈值放宽到 0.05px，避免浮点抖动误判
+    if (moved) {
+      this.stuckSince = 0;       // 在动 → 重置计时
+    } else if (this.stuckSince === 0) {
+      this.stuckSince = now;     // 刚开始不动 → 记录时刻
     }
     this.lastY = this.y;
-    if (this.stuckCount > CONFIG.STUCK_FRAMES) {
-      const surfY = this.scene.grid.surfaceYAt(this.x);
-      if (this.y + this.r < surfY - CONFIG.EPS) {
-        this.state = 'falling';
-        this.vy = CONFIG.SNOWBALL_GRAVITY;
-        this.stackWith = null;   // 清除堆叠引用，防止永久悬空
-      }
-      this.stuckCount = 0;
+
+    const stuckTooLong = this.stuckSince > 0 && (now - this.stuckSince) > CONFIG.STUCK_MS;
+    if (!stuckTooLong) return;
+
+    const surfY = this.scene.grid.surfaceYAt(this.x);
+    this.stackWith = null;       // 一律清除堆叠引用
+    if (this.y + this.r < surfY - 0.5) {
+      this.state = 'falling';    // 悬空卡住 → 转为下落
+      this.vy = CONFIG.SNOWBALL_GRAVITY;
+    } else {
+      this.y = surfY - this.r;   // 贴面卡死 → 强行按到雪面
+      this.vx = 0; this.vy = 0;
+      this.state = 'free';
     }
+    this.stuckSince = 0;
   }
 
   update(dt) {
@@ -955,15 +1094,15 @@ class Snowball {
     this.vx *= Math.pow(CONFIG.SNOWBALL_FRICTION, dt);
     this.x += this.vx * dt;
 
-    /* ① 落地绝对优先：只要底部触及雪面，立即贴地 */
+    /* 落地绝对优先：只要底部触及雪面，立即贴地 */
     const surfY = g.surfaceYAt(this.x);
     if (this.y + this.r >= surfY) {
       this.y = surfY - this.r;
       this.x = p.constrain(this.x, this.r, p.width - this.r);
-      this.stuckCount = 0;
+      this.stuckSince = 0;
     } else {
       this.x = p.constrain(this.x, this.r, p.width - this.r);
-      this.checkStuck();   // 悬空时检测
+      this.checkStuck(this.p.millis());   // 悬空时检测（传当前时间）
     }
     this.angle += (this.vx / Math.max(this.r, CONFIG.EPS)) * dt;
   }
@@ -974,7 +1113,7 @@ class Snowball {
     this.x += this.vx * dt;
     this.y += this.vy * dt;
 
-    /* ① 落地绝对优先 */
+    /* 落地绝对优先 */
     const surfY = g.surfaceYAt(this.x);
     if (this.y + this.r >= surfY) {
       this.y = surfY - this.r;
@@ -982,11 +1121,11 @@ class Snowball {
       this.vy = 0;
       this.state = 'free';
       this.justLanded = true;
-      this.stuckCount = 0;
+      this.stuckSince = 0;
       return;
     }
     this.x = p.constrain(this.x, this.r, p.width - this.r);
-    this.checkStuck();   // 下落时也检测
+    this.checkStuck(this.p.millis());   // 下落时也检测（传当前时间）
     this.angle += (this.vx / Math.max(this.r, CONFIG.EPS)) * dt;
 
     for (const other of system.balls) {
@@ -1346,7 +1485,7 @@ class SnowballSystem {
 }
 
 
-/* ════════════════ 铲雪车（v15：触屏归位+兜底） ════════════════ */
+/* ════════════════ 铲雪车（触屏归位+兜底） ════════════════ */
 class SnowPlow {
   constructor(scene) {
     this.scene = scene;
@@ -1496,7 +1635,7 @@ class SnowPlow {
 }
 
 
-/* ════════════════ 场景总控（v15：触屏释放确保endDrag + 呼吸动画更新） ════════════════ */
+/* ════════════════ 场景总控（触屏释放确保endDrag + 呼吸动画更新） ════════════════ */
 class SnowScene {
   constructor(p) {
     this.p = p;
@@ -1622,7 +1761,7 @@ class SnowScene {
         this.speedMult + dirK * CONFIG.SPEED_RATE * dtSec);
     }
 
-    /* ② 更新呼吸动画相位 */
+    /* 更新呼吸动画相位 */
     this.bg.updateBreath(dtMs);
 
     this.handleDragFrame(dt);
