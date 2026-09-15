@@ -1667,10 +1667,10 @@ class SnowScene {
     p.textSize(CONFIG.HUD_TEXT_SIZE);
     p.textAlign(p.LEFT, p.TOP);
     p.fill(c[0], c[1], c[2], CONFIG.HUD_ALPHA);
-    p.text('snow speed x' + this.speedMult.toFixed(CONFIG.SPEED_DECIMALS) + '  scale x' + this.sizeScale.toFixed(CONFIG.SPEED_DECIMALS),
+    p.text('雪速 x' + this.speedMult.toFixed(CONFIG.SPEED_DECIMALS) + '  雪尺 x' + this.sizeScale.toFixed(CONFIG.SPEED_DECIMALS),
            CONFIG.HUD_MARGIN_X, CONFIG.HUD_MARGIN_Y);
     p.fill(c[0], c[1], c[2], CONFIG.HUD_ALPHA * CONFIG.HUD_HINT_ALPHA_RATIO);
-    p.text('lamp click / hold melt / drag plow / dblclick clear / roll & stack snowman',
+    p.text('点路灯开关 · 长按消融 · 拖铲雪车擦雪 · 双击清场 · 滚球/堆雪人/双击碎裂',
            CONFIG.HUD_MARGIN_X,
            CONFIG.HUD_MARGIN_Y + CONFIG.HUD_TEXT_SIZE * CONFIG.HUD_LINE_SPACING);
   }
